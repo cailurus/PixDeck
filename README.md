@@ -42,6 +42,12 @@ There's also a **Canvas** tab: a 52×16 pixel editor to draw by hand, stamp text
 
 A local server (`pixbar_panel.py`, pure Python standard library) runs each plugin in a thread, serves the web app, and proxies the device's HTTP API — all bound to `127.0.0.1`. Your browser talks only to this local server, which talks to your clock over the LAN. Plugins live in `plugins/<name>/` and are auto-discovered.
 
+> **Works with the device's official (stock) firmware only.** PixDeck drives the clock through that firmware's *Custom App HTTP protocol* — which is exactly why it needs no flashing. A reflashed / custom firmware would drop that protocol and would not work with PixDeck unless it reimplemented it.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](./LICENSE) — you may use, modify, and redistribute it (including repackaging and building on it) for **non-commercial** purposes. **Commercial use is not permitted.**
+
 ---
 
 <div align="center">
