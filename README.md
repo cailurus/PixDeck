@@ -46,7 +46,7 @@ A local server (`pixbar_panel.py`, pure Python standard library) runs each plugi
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](./LICENSE) — you may use, modify, and redistribute it (including repackaging and building on it) for **non-commercial** purposes. **Commercial use is not permitted.**
+[Creative Commons Attribution-NonCommercial 4.0 (CC BY-NC 4.0)](./LICENSE) — you may share, adapt, repackage, and build on it for **non-commercial** purposes, with attribution. **Commercial use is not permitted.**
 
 ---
 
