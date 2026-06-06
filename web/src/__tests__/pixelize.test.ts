@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { pixelize, type PixelView } from '../canvas/pixelize'
-import { SOURCES } from '../canvas/logoSources'
 
 function solid(w: number, h: number, rgba: [number, number, number, number]): PixelView {
   const data = new Uint8ClampedArray(w * h * 4)
@@ -24,14 +23,5 @@ describe('pixelize', () => {
     // 接近红的不纯色 (250,8,4) 应吸附到调色板里的纯红 [255,0,0]
     const b = pixelize(solid(4, 4, [250, 8, 4, 255]), { size: 4, method: 'nearest', snap: true, invert: false, palette: [[255, 0, 0], [0, 0, 255]] })!
     expect(b.cells[0][0]).toEqual([255, 0, 0])
-  })
-})
-
-describe('logoSources', () => {
-  it('含 4 个内置 Logo, 均为 data URL', () => {
-    for (const k of ['AAPL', 'MSFT', 'NVDA', 'GOOGL']) {
-      expect(typeof SOURCES[k]).toBe('string')
-      expect(SOURCES[k].startsWith('data:image/')).toBe(true)
-    }
   })
 })

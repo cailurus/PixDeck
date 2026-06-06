@@ -81,11 +81,3 @@ export function pixelize(img: PixelView, opts: PixelizeOptions): PixelBlock | nu
   }
   return { w: ow, h: oh, cells }
 }
-
-// 品牌色板(随内置 Logo 预设),数值移植自 logo.html palForCurrent()。
-export const BRAND_PALETTES: Record<string, RGB[]> = {
-  MSFT: [[242, 80, 34], [127, 186, 0], [0, 164, 239], [255, 185, 0]],
-  GOOGL: [[234, 67, 53], [251, 188, 5], [52, 168, 83], [66, 133, 244]],
-  NVDA: [[118, 185, 0]],
-  AAPL: [[255, 255, 255]],
-}
