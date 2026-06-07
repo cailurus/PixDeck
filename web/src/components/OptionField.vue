@@ -1,16 +1,21 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import type { OptSpec } from '../types'
 const props = defineProps<{ spec: OptSpec; value: string | number }>()
 const emit = defineEmits<{
   (e: 'change', v: string): void
   (e: 'open-search', spec: OptSpec): void
 }>()
+// 文本/数字框用本地状态; 只在未编辑时同步外部值, 否则 2.5s 轮询会把正在输入的内容冲掉
+const local = ref(String(props.value ?? ''))
+const editing = ref(false)
+watch(() => props.value, (v) => { if (!editing.value) local.value = String(v ?? '') })
 function display(v: string | number): string {
   return typeof v === 'string' && v.includes('|') ? v.split('|').slice(2).join('|') : String(v)
 }
-function onText(e: Event) { emit('change', (e.target as HTMLInputElement).value) }
+function submit() { emit('change', local.value) }
+function onBlur() { editing.value = false; submit() }
 function onSelect(e: Event) { emit('change', (e.target as HTMLSelectElement).value) }
-void props
 </script>
 
 <template>
@@ -22,10 +27,11 @@ void props
       </button>
     </template>
     <template v-else-if="spec.type === 'text'">
-      <input type="text" :value="value" @change="onText" />
+      <input type="text" v-model="local" @focus="editing = true" @blur="onBlur" @keydown.enter="submit" />
     </template>
     <template v-else-if="spec.type === 'number'">
-      <input type="number" :min="spec.min" :max="spec.max" :value="value" @change="onText" style="width:84px" />
+      <input type="number" :min="spec.min" :max="spec.max" v-model="local"
+        @focus="editing = true" @blur="onBlur" @keydown.enter="submit" style="width:84px" />
     </template>
     <template v-else>
       <select :value="value" @change="onSelect">
