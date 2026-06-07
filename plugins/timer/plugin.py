@@ -209,12 +209,14 @@ def frame_for(item, interval):
 
 def run_loop(device, interval, stop=None, log=print, dry_run=False, once=False, options=None):
     opt = options or {}
+    # 数值类(练/歇/组数)开机时快照 — 跑到一半改不打乱当前计时, 下次开启生效
     work = _clampint(opt.get("work"), 30, 1, 3600)
     rest = _clampint(opt.get("rest"), 15, 0, 3600)
     rounds = _clampint(opt.get("rounds"), 8, 1, 99)
-    orient = opt.get("orient", "pv")
-    digmode = opt.get("digits", "v")
     phases = build_phases(work, rest, rounds)
+
+    def disp():                                   # 显示类(朝向/数字)每帧实时读, 调整即时反映到设备
+        return opt.get("orient", "pv"), opt.get("digits", "v")
 
     def emit(frame, line):
         ts = time.strftime("%H:%M:%S")
@@ -228,7 +230,8 @@ def run_loop(device, interval, stop=None, log=print, dry_run=False, once=False, 
 
     if once:
         kind, dur, rl = phases[0]
-        emit(_render(kind, dur, 1.0, rl, orient, digmode), f"{kind} {dur}s r{rl}")
+        o, d = disp()
+        emit(_render(kind, dur, 1.0, rl, o, d), f"{kind} {dur}s r{rl}")
         return
 
     for kind, dur, rl in phases:
@@ -238,7 +241,8 @@ def run_loop(device, interval, stop=None, log=print, dry_run=False, once=False, 
             if rem <= 0:
                 break
             secs = int(math.ceil(rem))
-            emit(_render(kind, secs, rem / dur, rl, orient, digmode), f"{kind} {secs:3d}s r{rl}")
+            o, d = disp()
+            emit(_render(kind, secs, rem / dur, rl, o, d), f"{kind} {secs:3d}s r{rl}")
             wait = min(TICK, max(0.05, rem))
             if stop is not None and stop.wait(wait):
                 return
@@ -247,7 +251,8 @@ def run_loop(device, interval, stop=None, log=print, dry_run=False, once=False, 
         if stop is not None and stop.is_set():
             return
     while stop is None or not stop.is_set():
-        emit(_done_frame(orient, digmode), "done")
+        o, d = disp()
+        emit(_done_frame(o, d), "done")
         if stop is None or stop.wait(1.0):
             break
 
