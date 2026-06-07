@@ -2,11 +2,11 @@
 """timer — 竖装距离计时柱 -> 像素时钟 DIY "timer"(插件, 工具)
 
 为"架在三脚架上、竖过来、离得远"设计的间歇/训练计时器: 一根随时间下沉的彩色光柱 +
-大号秒数。竖装时两位数字上下堆叠(26 = 上 2 下 6), 字号更大、远处更易读。
-练=绿 / 歇=黄 / 最后 3 秒=红。设 练X秒 / 歇Y秒 / 几组, 开启即从头跑; 跑完显示完成态。
+大号秒数。练=绿 / 歇=黄 / 最后 3 秒=红。设 练X秒 / 歇Y秒 / 几组, 开启即从头跑; 跑完显示完成态。
 
 竖装渲染: 先在"竖立坐标系"(16 宽 × 52 高)里正常画好, 再整体旋转 90° 落进设备 52×16。
-数字用纯方块像素字体(横平竖直, 无斜折)。朝向: 竖装 / 竖装(翻转) / 横装(放桌面)。
+数字用纯方块像素字体(横平竖直, 无斜折)。
+朝向: 竖装 / 竖装(翻转) / 横装(放桌面)。数字: 竖排(两位上下堆叠, 大) / 横排(并排) / 不显示(只要光柱)。
 
 单独运行: python3 plugins/timer/plugin.py [--device IP] [--dry-run] [--once]
 """
@@ -17,7 +17,7 @@ import pixbar_core as core
 APP = "timer"
 NAME = "计时柱"
 GROUP = "工具"
-DESC = "竖装训练计时器: 下沉光柱 + 大方块秒数(竖装上下堆叠), 设 练/歇/组数, 远处一眼读剩余。"
+DESC = "竖装训练计时器: 下沉光柱 + 大方块秒数, 设 练/歇/组数; 数字可竖排/横排/不显示, 远处一眼读剩余。"
 DEFAULT_INTERVAL = 1
 ITEMS = [APP]
 OPTIONS = [
@@ -26,6 +26,8 @@ OPTIONS = [
     {"key": "rounds", "label": "组数", "type": "number", "default": 8, "min": 1, "max": 99},
     {"key": "orient", "label": "朝向", "default": "pv",
      "choices": [["pv", "竖装"], ["pv2", "竖装(翻转)"], ["land", "横装"]]},
+    {"key": "digits", "label": "数字", "default": "v",
+     "choices": [["v", "竖排(大)"], ["h", "横排"], ["none", "不显示"]]},
 ]
 
 W, H = 52, 16          # 设备缓冲(横)
@@ -73,6 +75,39 @@ def _blit(buf, bw, bh, ch, x0, y0, scale, color):
                             buf[y * bw + x] = color
 
 
+def _fit_scale(buf_w, s):
+    """选能在宽 buf_w 内并排放下整串数字的最大 scale。"""
+    for sc in (3, 2, 1):
+        if len(s) * GBW * sc + (len(s) - 1) * sc <= buf_w:
+            return sc
+    return 1
+
+
+def _draw_horizontal(buf, bw, bh, s, color):
+    scale = _fit_scale(bw, s)
+    tw = len(s) * GBW * scale + (len(s) - 1) * scale
+    cx = (bw - tw) // 2
+    y0 = (bh - GBH * scale) // 2
+    for ch in s:
+        _blit(buf, bw, bh, ch, cx, y0, scale, color)
+        cx += (GBW + 1) * scale
+
+
+def _draw_stacked(buf, bw, bh, s, color):
+    """两位上下堆叠(放大); 单位数一个超大字。"""
+    if len(s) == 1:
+        scale = 3
+        _blit(buf, bw, bh, s, (bw - GBW * scale) // 2, (bh - GBH * scale) // 2, scale, color)
+        return
+    scale = 2
+    gap = 4
+    th = GBH * scale
+    x0 = (bw - GBW * scale) // 2
+    y0 = (bh - (th * 2 + gap)) // 2
+    _blit(buf, bw, bh, s[0], x0, y0, scale, color)
+    _blit(buf, bw, bh, s[1], x0, y0 + th + gap, scale, color)
+
+
 def _row_dots(buf, bw, py, n, color):
     n = min(n, 8)
     if n <= 0:
@@ -85,8 +120,8 @@ def _row_dots(buf, bw, py, n, color):
             buf[py * bw + x] = color
 
 
-def render_portrait(kind, secs, frac, rounds_left, flip):
-    """16x52 竖画布: 底部上沉光柱 + 居中大数字(两位上下堆叠) + 顶部组数点, 再旋转进 52x16。"""
+def render_portrait(kind, secs, frac, rounds_left, flip, digmode):
+    """16x52 竖画布: 底部上沉光柱 + 数字(竖排/横排/不显示) + 顶部组数点, 再旋转进 52x16。"""
     pp = [BG] * (PW * PH)
     base = RED if secs <= 3 else (WORK if kind == "work" else REST)
     filled = int(round(max(0.0, min(1.0, frac)) * PH))
@@ -97,24 +132,14 @@ def render_portrait(kind, secs, frac, rounds_left, flip):
                 pp[py * PW + px] = col
     _row_dots(pp, PW, 0, rounds_left, DOT)
     s = str(secs)
-    if len(s) == 1:                                   # 单位数: 一个超大字居中
-        scale = 3
-        _blit(pp, PW, PH, s, (PW - GBW * scale) // 2, (PH - GBH * scale) // 2, scale, WHITE)
-    elif len(s) == 2:                                 # 两位数: 上下堆叠, 各放大
-        scale = 2
-        gap = 4
-        th = GBH * scale
-        x0 = (PW - GBW * scale) // 2
-        y0 = (PH - (th * 2 + gap)) // 2
-        _blit(pp, PW, PH, s[0], x0, y0, scale, WHITE)
-        _blit(pp, PW, PH, s[1], x0, y0 + th + gap, scale, WHITE)
-    else:                                             # 3 位(>=100s, 少见): 并排小号
-        scale = 1
-        tw = len(s) * GBW * scale + (len(s) - 1) * scale
-        cx = (PW - tw) // 2
-        for ch in s:
-            _blit(pp, PW, PH, ch, cx, (PH - GBH * scale) // 2, scale, WHITE)
-            cx += (GBW + 1) * scale
+    if digmode == "none":
+        pass
+    elif digmode == "h":
+        _draw_horizontal(pp, PW, PH, s, WHITE)
+    elif len(s) <= 2:                                 # v: 竖排堆叠(三位以上自动并排)
+        _draw_stacked(pp, PW, PH, s, WHITE)
+    else:
+        _draw_horizontal(pp, PW, PH, s, WHITE)
     dev = [BG] * (W * H)
     for py in range(PH):
         for px in range(PW):
@@ -126,7 +151,7 @@ def render_portrait(kind, secs, frac, rounds_left, flip):
     return core.bitmap_frame(dev)
 
 
-def render_landscape(kind, secs, frac, rounds_left):
+def render_landscape(kind, secs, frac, rounds_left, digmode):
     """横放(桌面): 方块数字在左 + 底部横向下沉条 + 右上组数点。"""
     px = [BG] * (W * H)
     base = RED if secs <= 3 else (WORK if kind == "work" else REST)
@@ -135,11 +160,12 @@ def render_landscape(kind, secs, frac, rounds_left):
     for y in range(14, 16):
         for x in range(barw):
             px[y * W + x] = col
-    s = str(secs)
-    cx = 2
-    for ch in s:
-        _blit(px, W, H, ch, cx, 2, 1, WHITE)
-        cx += (GBW + 1)
+    if digmode != "none":
+        s = str(secs)
+        cx = 2
+        for ch in s:
+            _blit(px, W, H, ch, cx, 2, 1, WHITE)
+            cx += (GBW + 1)
     n = min(rounds_left, 6)
     for i in range(n):
         x = W - 2 - i * 3
@@ -149,14 +175,14 @@ def render_landscape(kind, secs, frac, rounds_left):
     return core.bitmap_frame(px)
 
 
-def _render(kind, secs, frac, rounds_left, orient):
+def _render(kind, secs, frac, rounds_left, orient, digmode):
     if orient == "land":
-        return render_landscape(kind, secs, frac, rounds_left)
-    return render_portrait(kind, secs, frac, rounds_left, flip=(orient == "pv2"))
+        return render_landscape(kind, secs, frac, rounds_left, digmode)
+    return render_portrait(kind, secs, frac, rounds_left, flip=(orient == "pv2"), digmode=digmode)
 
 
-def _done_frame(orient):
-    return _render("work", 0, 1.0, 0, orient)
+def _done_frame(orient, digmode):
+    return _render("work", 0, 1.0, 0, orient, digmode)
 
 
 def _clampint(v, default, lo, hi):
@@ -178,7 +204,7 @@ def build_phases(work, rest, rounds):
 
 def frame_for(item, interval):
     """push_once / standalone --once: 满柱预览(练 + 26 秒, 竖排)。"""
-    return render_portrait("work", 26, 1.0, 8, flip=False), "timer preview"
+    return render_portrait("work", 26, 1.0, 8, flip=False, digmode="v"), "timer preview"
 
 
 def run_loop(device, interval, stop=None, log=print, dry_run=False, once=False, options=None):
@@ -187,6 +213,7 @@ def run_loop(device, interval, stop=None, log=print, dry_run=False, once=False, 
     rest = _clampint(opt.get("rest"), 15, 0, 3600)
     rounds = _clampint(opt.get("rounds"), 8, 1, 99)
     orient = opt.get("orient", "pv")
+    digmode = opt.get("digits", "v")
     phases = build_phases(work, rest, rounds)
 
     def emit(frame, line):
@@ -201,7 +228,7 @@ def run_loop(device, interval, stop=None, log=print, dry_run=False, once=False, 
 
     if once:
         kind, dur, rl = phases[0]
-        emit(_render(kind, dur, 1.0, rl, orient), f"{kind} {dur}s r{rl}")
+        emit(_render(kind, dur, 1.0, rl, orient, digmode), f"{kind} {dur}s r{rl}")
         return
 
     for kind, dur, rl in phases:
@@ -211,7 +238,7 @@ def run_loop(device, interval, stop=None, log=print, dry_run=False, once=False, 
             if rem <= 0:
                 break
             secs = int(math.ceil(rem))
-            emit(_render(kind, secs, rem / dur, rl, orient), f"{kind} {secs:3d}s r{rl}")
+            emit(_render(kind, secs, rem / dur, rl, orient, digmode), f"{kind} {secs:3d}s r{rl}")
             wait = min(TICK, max(0.05, rem))
             if stop is not None and stop.wait(wait):
                 return
@@ -220,7 +247,7 @@ def run_loop(device, interval, stop=None, log=print, dry_run=False, once=False, 
         if stop is not None and stop.is_set():
             return
     while stop is None or not stop.is_set():
-        emit(_done_frame(orient), "done")
+        emit(_done_frame(orient, digmode), "done")
         if stop is None or stop.wait(1.0):
             break
 
